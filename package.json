@@ -1,0 +1,11 @@
+{
+  "name": "graphqltalk",
+  "version": "1.0.0",
+  "description": "A talk about graphql",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon ./index.js -e js,html"
+  },
+  "author": "blovato",
+  "license": "ISC"
+}

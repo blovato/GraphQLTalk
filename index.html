@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>GraphQL</title>
+    <meta charset="utf-8">
+    <style>
+      @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+
+      body { font-family: 'Droid Serif'; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+      .fit {
+        height: 40px;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <textarea id="source">
+
+class: center, middle
+<img src="https://cdn-images-1.medium.com/max/1200/1*49DDRZhUWvVnH-QNHuSUSw.png"
+     style="height: 20vh" />
+
+---
+
+# What Is It?
+
+### A specification for a type system and a query language for APIs
+
+https://graphql.org
+
+* Database and language agnostic
+* REST V2
+
+---
+class: middle, center
+<img src="https://cdn-images-1.medium.com/max/2600/1*f_XvFD7FvliMM74WHJ0vRQ.png"
+     style="height: 60vh;" />
+
+---
+
+## Backend
+
+* It sits between your controller and your application logic.
+* It exposes a single endpoint, which is a graph of the data in your system.
+* It is concerned with resolving queries received from api consumers.
+* It type checks request parameters and response objects.
+
+```ruby
+class GraphqlController &lt; ApplicationController
+  def execute
+    render json: schema_result
+  end
+
+  def schema_result
+    MySchema.execute(
+      params[:query],
+      variables: params[:variables],
+      context: { shopper: session[:shopper] },
+      operation_name: params[:operationName],
+    )
+  end
+end
+```
+
+---
+
+## Backend
+Define top level schema:
+
+```ruby
+class MySchema &lt; GraphQL::Schema
+  query QueryType
+  mutation MutationType
+  # ... other schema setup
+end
+```
+```ruby
+class QueryType &lt; GraphQL::Types::BaseObject
+  field :shopper, resolver: Resolvers::Shopper
+  # ... register other queries
+end
+```
+```ruby
+class MutationType &lt; GraphQL::Types::BaseObject
+  field :create_shopper, mutation: Mutations::CreateShopper
+  # ... register other mutations
+end
+```
+
+---
+
+## Backend
+Define queries:
+
+```ruby
+class Resolvers::Shopper &lt; GraphQL::Types::BaseObject
+  description "A shopper object"
+
+  type Types::Shopper, null: true
+
+  argument :id, ID, required: true
+
+  def resolve(id:)
+    Shopper.find_by(id: id)
+  end
+end
+```
+
+---
+
+## Backend
+
+Define query types:
+
+```ruby
+class Types::Shopper &lt; GraphQL::Types::BaseObject
+  description "A shopper object"
+  field :id, ID, null: true
+  field :address, Types::Address, null: true
+end
+```
+```ruby
+class Types::Address &lt; GraphQL::Types::BaseObject
+    description "An address object"
+    field :street, String, null: true
+    field :city, String, null: true
+    field :state, String, null: false
+    field :zip, String, null: true
+end
+```
+
+---
+
+## Backend
+Define mutations:
+
+```ruby
+class Mutations::CreateShopper &lt; GraphQL::Types::BaseObject
+    description "Create a shopper"
+
+    argument :shopper, Types::ShopperInput, required: true
+
+    field :shopper, Types::Shopper, null: true
+    field :errors, [Types::Error], null: true
+
+    def resolve(shopper:)
+      new_shopper, errors = CreateShopper.call(shopper_input: shopper)
+      {
+        shopper: new_shopper,
+        errors: errors,
+      }
+    end
+end
+```
+
+---
+
+## Backend
+
+Define input types:
+
+```ruby
+class Types::ShopperInput &lt; GraphQL::Types::BaseInputObject
+  description "A shopper input object"
+  argument :hit_ref, ID, required: true
+  argument :address, Types::AddressInput, required: true
+end
+```
+```ruby
+class Types::AddressInput &lt; GraphQL::Types::BaseInputObject
+    description "An address input object"
+    argument :street, String, required: false
+    argument :city, String, required: false
+    argument :state, String, required: true
+    argument :zip, String, required: false
+end
+```
+
+---
+
+## Backend
+
+<img src="https://raw.githubusercontent.com/blovato/GraphQLTalk/master/assets/tree.png"
+style="height: 60vh"/>
+
+---
+
+## Frontend
+
+```bash
+curl \
+  -X POST \
+  -H "Content-Type: application/json" \
+  --data '{ "query": "{ __schema { queryType { name } } }" }' \
+  http://localhost:3000/graphql
+```
+```js
+{
+  "data": {
+    "__schema": {
+      "queryType": {
+        "name": "Query"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Frontend
+
+1. A type system and defined data, which improves API trust and visibility.
+1. Generated API documentation and a postman-like development environment: GraphiQL.
+1. Clients can ask for exactly what fields they want and nothing extra.
+1. The api doesn't need to be versioned.
+1. Same client api for polling and websocket connections, which are typically vastly
+different.
+
+---
+## Frontend
+Queries:
+
+```js
+query {
+  shopper(id: "shopper_91avi8s02z") {
+    id
+    address {
+      street
+      city
+      state
+      zip
+    }
+  }
+}
+```
+```js
+{
+  data: {
+    id: "shopper_91avi8s02z"
+    address: {
+      street: "2531 25th Avenue",
+      city: "San Francisco",
+      state: "CA",
+      zip: "94116"
+    }
+  }
+}
+```
+
+---
+
+## Frontend
+Mutations:
+
+```js
+mutation {
+  createShopper(input: {
+    shopper: {
+      hitRef: "hit_sdk8y2clsd",
+      address: {
+        state: "CA"
+      }
+    }
+  }) {
+    address {
+      street
+      state
+    }
+  }
+}
+```
+```js
+{
+  data: {
+    address: {
+      street: null,
+      state: "CA"
+    }
+  }
+}
+```
+
+---
+
+## Frontend
+Subscriptions:
+
+```js
+subscription {
+  bind(id: "bind_wk2qh8dd7m") {
+    status
+  }
+}
+```
+```js
+{
+  data: {
+    status: 'pending',
+  }
+}
+```
+```js
+{
+  data: {
+    status: 'succeeded',
+  }
+}
+```
+
+---
+
+## Frontend
+api/mutations/createShopper.js
+
+```js
+import gql from 'graphql-tag';
+
+export default gql`
+  mutation createShopper($input: CreateShopperInput!) {
+    createShopperAndQuotes(input: $input) {
+      shopper { id }
+      errors {
+        key
+        message
+      }
+    }
+  }
+`;
+
+```
+
+---
+
+## Frontend
+
+container.js:
+
+```js
+import ViewComponent from './view';
+...
+const createShopperOptions = (props) =&gt; ({
+  variables: {
+    input: {
+      hitRef: props.hitRef,
+      address: {
+        state: props.answers.state,
+      },
+    },
+  },
+})
+
+export default flowRight(
+  connect(mapStateToProps, mapDispatchToProps),
+  graphql(createShopperMutation, {
+    name: 'createShopper',
+    options: createShopperOptions,
+  }),
+)(ViewComponent);
+```
+
+---
+
+## Frontend
+
+view.js:
+
+```js
+import React from 'react';
+...
+const View = (props) =&gt; (
+  &lt;ShopperForm submit={props.createShopper} /&gt;
+);
+
+export const View;
+```
+
+---
+
+# Resources
+
+1. General spec by facebook: graphql.org
+1. Ruby implementation: graphql-ruby.org
+1. Client library by meteor development group: apollographql.com
+
+
+    </textarea>
+    <script src="https://remarkjs.com/downloads/remark-latest.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create();
+    </script>
+  </body>
+</html>
